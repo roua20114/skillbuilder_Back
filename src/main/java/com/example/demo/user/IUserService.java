@@ -1,0 +1,17 @@
+package com.example.demo.user;
+
+import com.example.demo.registration.RegistrationRequest;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface IUserService {
+    List<User> getUsers();
+    User registerUser(RegistrationRequest request);
+    Optional<User> findByEmail(String email);
+   public User updateUser(User user);
+
+    void saveUserVerificationToken(User theUser, String verificationToken);
+
+    String validateToken(String theToken);
+}
