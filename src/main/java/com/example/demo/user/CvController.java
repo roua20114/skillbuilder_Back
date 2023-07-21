@@ -11,6 +11,7 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 @RestController
 @RequestMapping(value = "/cvs",consumes = MediaType.ALL_VALUE,produces = MediaType.APPLICATION_JSON_VALUE)
+@CrossOrigin
 public class CvController {
     @Autowired
     private CvService service;

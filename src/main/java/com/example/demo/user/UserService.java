@@ -1,82 +1,130 @@
 package com.example.demo.user;
 
-import com.example.demo.exception.UserAlreadyExistsException;
-import com.example.demo.registration.RegistrationRequest;
-import com.example.demo.registration.token.VerificationToken;
-import com.example.demo.registration.token.VerificationTokenRepository;
-import lombok.RequiredArgsConstructor;
+import com.example.demo.exception.DuplicateResourceException;
+import com.example.demo.exception.RequestValidationException;
+import com.example.demo.exception.ResourceNotFoundException;
+import lombok.NoArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Calendar;
 import java.util.List;
-import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 @Service
-@RequiredArgsConstructor
-public class UserService implements IUserService{
-    private final UserRepository userRepository;
+@NoArgsConstructor(force = true)
+
+public class UserService {
+
+    private final IUserService iUserService;
+    private final UserDTOMapper userDTOMapper;
     private final PasswordEncoder passwordEncoder;
-    private final VerificationTokenRepository tokenRepository;
-    @Override
-    public List<User> getUsers() {
-        return userRepository.findAll();
+
+    public UserService(@Qualifier IUserService iUserService, UserDTOMapper userDTOMapper, PasswordEncoder passwordEncoder) {
+        this.iUserService = iUserService;
+        this.userDTOMapper = userDTOMapper;
+        this.passwordEncoder = passwordEncoder;
     }
 
-    @Override
-    public User registerUser(RegistrationRequest request) {
-        Optional<User> user = this.findByEmail(request.email());
-        if (user.isPresent()){
-            throw new UserAlreadyExistsException(
-                    "User with email "+request.email() + " already exists");
+
+    public List<UserDTO> getAllUsers() {
+
+        return iUserService.selectAllUsers() .stream()
+                .map(userDTOMapper)
+                .collect(Collectors.toList());
+    }
+
+
+    public UserDTO getUser(Long id) {
+        return iUserService.selectUserById(id)
+                .map(userDTOMapper)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "customer with id [%s] not found".formatted(id)
+                ));
+    }
+    public void addUser(UserRegistrationRequest userRegistrationRequest) {
+        // check if email exists
+        String email = userRegistrationRequest.email();
+        if (iUserService.existUserWithEmail(email)) {
+            throw new DuplicateResourceException(
+                    "email already taken"
+            );
         }
-        var newUser = new User();
-        newUser.setFirstName(request.firstName());
-        newUser.setLastName(request.lastName());
-        newUser.setEmail(request.email());
-        newUser.setPassword(passwordEncoder.encode(request.password()));
-        newUser.setRole(request.role());
-        return userRepository.save(newUser);
 
+        // add
+        User user = new User(
+                userRegistrationRequest.name(),
+                userRegistrationRequest.email(),
+                passwordEncoder.encode(userRegistrationRequest.password()));
+
+        iUserService.insertUser(user);
     }
 
 
-
-    @Override
-    public Optional<User> findByEmail(String email) {
-        return userRepository.findByEmail(email);
+    public void deleteUserById(Long id) {
+        checkIfUserExistsOrThrow(id);
+       iUserService.deleteUserById(id);
     }
 
-
-
-
-    @Override
-    public User updateUser(User user) {
-        return userRepository.save(user);
-    }
-
-    @Override
-    public void saveUserVerificationToken(User theUser, String token) {
-       var verificationToken = new VerificationToken(token,theUser);
-       tokenRepository.save(verificationToken);
-
-
-    }
-
-    @Override
-    public String validateToken(String theToken) {
-        VerificationToken token = tokenRepository.findByToken(theToken);
-        if(token == null){
-            return "Invalid verification token";
+    private void checkIfUserExistsOrThrow(Long Id) {
+        if (!iUserService.existsUserById(Id)) {
+            throw new ResourceNotFoundException(
+                    "customer with id [%s] not found".formatted(Id)
+            );
         }
-        User user = token.getUser();
-        Calendar calendar = Calendar.getInstance();
-        if ((token.getExpirationTime().getTime() - calendar.getTime().getTime())<0){
-            tokenRepository.delete(token);
-            return "Token already expired";
-        }
-        user.setIsEnabled(true);
-        userRepository.save(user);
-        return "valid";
     }
+
+
+
+    public void updateCustomer(Long Id,
+                               UserUpdateRequest updateRequest) {
+        // TODO: for JPA use .getReferenceById(customerId) as it does does not bring object into memory and instead a reference
+            User user =iUserService.selectUserById(Id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "customer with id [%s] not found".formatted(Id)
+                ));
+
+        boolean changes = false;
+
+        if (updateRequest.name() != null && !updateRequest.name().equals(user.getName())) {
+            user.setName(updateRequest.name());
+            changes = true;
+        }
+
+
+        if (updateRequest.email() != null && !updateRequest.email().equals(user.getEmail())) {
+            if (iUserService.existUserWithEmail(updateRequest.email())) {
+                throw new DuplicateResourceException(
+                        "email already taken"
+                );
+            }
+           user.setEmail(updateRequest.email());
+            changes = true;
+        }
+
+        if (!changes) {
+            throw new RequestValidationException("no data changes found");
+        }
+
+        iUserService.updateUser(user);
+    }
+
+
+
+    public void uploadCustomerProfileImage(Long Id,
+                                           MultipartFile file) {
+        checkIfUserExistsOrThrow(Id);
+        String profileImageId = UUID.randomUUID().toString();
+
+        iUserService.updateUserProfileImageId(profileImageId,Id);
+    }
+
+
+
+
+
+
 
 }
