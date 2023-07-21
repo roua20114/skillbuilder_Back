@@ -1,2 +1,7 @@
-package com.example.demo.user;public record UserUpdateRequest() {
+package com.example.demo.user;
+
+public record UserUpdateRequest(
+        String name,
+        String email
+) {
 }

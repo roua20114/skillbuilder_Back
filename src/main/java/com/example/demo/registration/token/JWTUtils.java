@@ -1,44 +1,82 @@
 package com.example.demo.registration.token;
 
-import com.example.demo.user.User;
-import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.stereotype.Service;
 
-import java.util.Calendar;
+import java.security.Key;
+import java.time.Instant;
 import java.util.Date;
-@Getter
-@Setter
-@Entity
-@NoArgsConstructor
-public class VerificationToken {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    private String token;
-    private Date expirationTime;
-    private static final int EXPIRATION_TIME = 15;
-    @OneToOne
-    @JoinColumn(name = "user_id")
-    private User user;
+import java.util.List;
+import java.util.Map;
 
-    public VerificationToken(String token, User user) {
-        super();
-        this.token = token;
-        this.user = user;
-        this.expirationTime = this.getTokenExpirationTime();
-    }
-    public VerificationToken(String token) {
-        super();
-        this.token = token;
-        this.expirationTime = this.getTokenExpirationTime();
+import static java.time.temporal.ChronoUnit.DAYS;
+
+@Service
+public class JWTUtils {
+    private static final String SECRET_KEY = "foobar_123456789_foobar_123456789_foobar_123456789_foobar_123456789";
+
+
+    public String issueToken(String subject) {
+        return issueToken(subject, Map.of());
     }
 
-    public Date getTokenExpirationTime() {
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTimeInMillis(new Date().getTime());
-        calendar.add(Calendar.MINUTE, EXPIRATION_TIME);
-        return new Date(calendar.getTime().getTime());
+    public String issueToken(String subject, String ...scopes) {
+
+        return issueToken(subject, Map.of("scopes", scopes));
+    }
+
+    public String issueToken(String subject, List<String> scopes) {
+        return issueToken(subject, Map.of("scopes", scopes));
+    }
+
+
+    public String issueToken(
+            String subject,
+            Map<String, Object> claims) {
+        String token = Jwts
+                .builder()
+                .setClaims(claims)
+                .setSubject(subject)
+                .setIssuer("https://amigoscode.com")
+                .setIssuedAt(Date.from(Instant.now()))
+                .setExpiration(
+                        Date.from(
+                                Instant.now().plus(15, DAYS)
+                        )
+                )
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+        return token;
+    }
+
+    public String getSubject(String token) {
+        return getClaims(token).getSubject();
+    }
+
+    private Claims getClaims(String token) {
+        Claims claims = Jwts
+                .parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+        return claims;
+    }
+
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
+    }
+
+    public boolean isTokenValid(String jwt, String username) {
+        String subject = getSubject(jwt);
+        return subject.equals(username) && !isTokenExpired(jwt);
+    }
+
+    private boolean isTokenExpired(String jwt) {
+        Date today = Date.from(Instant.now());
+        return getClaims(jwt).getExpiration().before(today);
     }
 }

@@ -1,2 +1,9 @@
-package com.example.demo.user;public class UserRegistrationRequest {
+package com.example.demo.user;
+
+public record UserRegistrationRequest(
+        String name,
+        String email,
+        String password
+
+) {
 }
